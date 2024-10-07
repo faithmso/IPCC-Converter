@@ -43,6 +43,18 @@ def load_rohs_list():
     print(f"Final RoHS List: {rohs_list}")
     return rohs_list
 
+def load_iec_list():
+    iec_file_path = os.path.join(os.path.dirname(__file__), 'iec.csv')
+    iec_list = []
+    with open(iec_file_path, newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            if 'substance_name' in row and row['substance_name']:  # Ensure the column exists and is not empty
+                iec_list.append(row['substance_name'])
+            else:
+                print(f"Warning: Missing or empty 'substance_name' in row: {row}")
+    return iec_list
+
 
 
 def extract_shai_files(shai_folder):

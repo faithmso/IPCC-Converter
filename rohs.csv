@@ -1,11 +1,11 @@
-﻿substance_name,Concentaration
-Cadmium ,1
-Lead ,10.00%
-Mercury ,10.00%
-Hexavalent chromium ,10.00%
-Polybrominated biphenyls ,10.00%
-Polybrominated diphenyl ethers,10.00%
-Bis(2-ethylhexyl) phthalate ,10.00%
-Butyl benzyl phthalate ,10.00%
-Dibutyl phthalate ,10.00%
-Diisobutyl phthalate ,10.00%
+Substance Name,Identity
+Cadmium/cadmium compounds,00001
+Polybrominated biphenyls (PBBs),00002
+Polybrominated diphenyl ethers (PBDEs),00003
+Chromium VI compounds,00004
+Lead/lead compounds,00005
+Mercury/mercury compounds,00006
+Bis(2-ethylhexyl) phthalate (DEHP),00007
+Butyl benzyl phthalate (BBP),00008
+Dibutyl phthalate (DBP),00009
+Diisobutyl phthalate (DIBP),00010
