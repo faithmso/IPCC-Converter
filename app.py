@@ -22,7 +22,10 @@ def load_svhc_list():
         reader = csv.DictReader(csvfile)
         for row in reader:
             if 'substance_name' in row and row['substance_name']:  # Ensure the column exists and is not empty
-                svhc_list.append(row['substance_name'])
+                svhc_list.append({
+                    'name': row['Substance_name'],
+                    'identity': row['Identity']
+                })
             else:
                 print(f"Warning: Missing or empty 'substance_name' in row: {row}")
     return svhc_list
@@ -30,27 +33,33 @@ def load_svhc_list():
 def load_rohs_list():
     rohs_file_path = os.path.join(os.path.dirname(__file__), 'rohs.csv')
     rohs_list = []
-    with open(rohs_file_path, newline='', encoding='utf-8-sig') as csvfile:  # Use 'utf-8-sig' to handle BOM
+    with open(rohs_file_path, newline='', encoding='utf-8-sig') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            # Ensure we are using the corrected column name and strip leading/trailing spaces
-            substance_name = row.get('substance_name', '').strip()
+            substance_name = row.get('Substance_name', '').strip()
+            identity = row.get('Identity', '').strip()
             if substance_name:
-                rohs_list.append(substance_name)
+                rohs_list.append({
+                    'name': substance_name,
+                    'identity': identity
+                })
             else:
                 print(f"Warning: Missing or empty 'substance_name' in row: {row}")
-    
-    print(f"Final RoHS List: {rohs_list}")
     return rohs_list
 
 def load_iec_list():
     iec_file_path = os.path.join(os.path.dirname(__file__), 'iec.csv')
     iec_list = []
-    with open(iec_file_path, newline='', encoding='utf-8') as csvfile:
+    with open(iec_file_path, newline='', encoding='utf-8-sig') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            if 'substance_name' in row and row['substance_name']:  # Ensure the column exists and is not empty
-                iec_list.append(row['substance_name'])
+            substance_name = row.get('Substance_name', '').strip()
+            identity = row.get('Identity', '').strip()
+            if substance_name:
+                iec_list.append({
+                    'name': substance_name,
+                    'identity': identity
+                })
             else:
                 print(f"Warning: Missing or empty 'substance_name' in row: {row}")
     return iec_list
@@ -119,16 +128,13 @@ def extract_info(xml_file):
             )
 
             if threshold_element is not None:
-                # Use the appropriate attribute based on which element was found
+            # Use the appropriate attribute based on which element was found
                 above_threshold = (
                     threshold_element.get('aboveThreshold') == 'true' or
                     threshold_element.get('aboveComplianceThreshold') == 'true' or
-                    threshhold_element.get('overThreshhold') == 'true' or
+                    threshold_element.get('overThreshold') == 'true' or
                     threshold_element.get('aboveThresholdLevel') == 'true'
                 )
-                #get the reporteing threshhold value or use default
-                reporting_threshold = threshold_element.get('reportingThreshold', '0.1 mass% of article [ReportingLevel:Article]')
-           
             # collect substance info    
             substance_info = {
                 'name': get_element_text(substance, 'name'),
@@ -228,9 +234,40 @@ def check_rohs(substances, rohs_list):
     
     return rohs_info
 
+
+def check_iec(substances, iec_list):
+    """
+    Check if any of the substances in the product are IEC substances, 
+    and whether they are above the threshold.
+    """
+    iec_info = []
+    
+    # Loop through the RoHS list
+    for iec in iec_list:
+        # Find the corresponding substance in the product's substance list
+        matched_substance = next((sub for sub in substances if sub['name'] == iec), None)
+        
+        # If the IEC substance is present and above threshold
+        if matched_substance:
+            iec_info.append({
+                'name': iec,
+                'above_threshold': matched_substance['above_threshold'],
+                'threshold': matched_substance['threshold']
+            })
+        else:
+            # If the IEC substance is not present in the product, use a standard entry
+            iec_info.append({
+                'name': iec,
+                'above_threshold': False,
+                'threshold': '0.1% by weight (1000 ppm) of homogeneous materials'
+            })
+    
+    return iec_info
+
 def process_folder(shai_folder):
     svhc_list = load_svhc_list()  # Load SVHC (REACH) substances
     rohs_list = load_rohs_list()  # Load RoHS substances
+    iec_list = load_iec_list() #Load IEC substances
     complete_entries = []
 
     extracted_files = extract_shai_files(shai_folder)
@@ -243,6 +280,7 @@ def process_folder(shai_folder):
         # Check substances against both SVHC (REACH) and RoHS lists
         svhc_substances = check_svhc(info['substances'], svhc_list)
         rohs_substances = check_rohs(info['substances'], rohs_list)
+        iec_substances = check_iec(info['substances'], iec_list )
 
         # Required fields
         required_fields = [
@@ -262,13 +300,14 @@ def process_folder(shai_folder):
             # Store both SVHC and RoHS substances separately
             complete_entry['svhc_substances'] = svhc_substances  # For REACH
             complete_entry['rohs_substances'] = rohs_substances  # For RoHS
+            complete_entry['iec_substances'] = iec_substances # for IEC
 
             complete_entries.append(complete_entry)
             file_status_list.append({'filename': os.path.basename(xml_path), 'status': 'success', 'error': None})
 
     # Convert the complete entries to a DataFrame
     df = pd.DataFrame(complete_entries)
-    return df, svhc_list, rohs_list  # Ensure three values are returned
+    return df, svhc_list, rohs_list, iec_list # Ensure three values are returned
 
 class ChemSherpaApp:
     def __init__(self, root):
@@ -293,18 +332,22 @@ class ChemSherpaApp:
         self.output_folder_display = tk.Entry(root, textvariable=self.output_folder_path, width=50)
         self.output_folder_display.pack(pady=5)
 
-        # Checkboxes for REACH and RoHS
+        # Checkboxes for REACH, IEC and RoHS
         self.selection_label = tk.Label(root, text="Select Compliance Type(s)")
         self.selection_label.pack(pady=5)
 
         self.reach_var = tk.IntVar()
         self.rohs_var = tk.IntVar()
+        self.iec_var = tk.IntVar()
 
         self.reach_checkbox = tk.Checkbutton(root, text="REACH", variable=self.reach_var)
         self.reach_checkbox.pack(pady=5)
 
         self.rohs_checkbox = tk.Checkbutton(root, text="RoHS", variable=self.rohs_var)
         self.rohs_checkbox.pack(pady=5)
+
+        self.iec_checkbox = tk.Checkbutton(root, text="IEC", variable=self.iec_var)
+        self.iec_checkbox.pack(pady=5)
 
         # Run Button
         self.run_button = tk.Button(root, text="Run", command=self.run_conversion)
@@ -334,9 +377,12 @@ class ChemSherpaApp:
         # Check whether the user selected either REACH or RoHS or both
         include_reach = self.reach_var.get() == 1
         include_rohs = self.rohs_var.get() == 1
+        include_iec = self.iec_var.get() == 1
+        
 
-        if not include_reach and not include_rohs:
-            messagebox.showerror("Error", "Please select at least one compliance type (REACH or RoHS).")
+
+        if not include_reach and not include_rohs and not include_iec:
+            messagebox.showerror("Error", "Please select at least one compliance type (REACH , IEC or RoHS).")
             return
 
         # Ensure the output folder exists
@@ -344,7 +390,7 @@ class ChemSherpaApp:
 
         # Process the input folder and extract data
         try:
-            df, svhc_list, rohs_list = process_folder(input_folder)
+            df, svhc_list, rohs_list, iec_list = process_folder(input_folder)
 
             # Save the DataFrame to a CSV file
             output_csv_path = os.path.join(output_folder, 'output_info.csv')
@@ -352,7 +398,7 @@ class ChemSherpaApp:
 
             # Generate XML files based on the user's selection
             for _, entry in df.iterrows():
-                self.generate_xml_file(entry, svhc_list, rohs_list, output_folder, include_reach, include_rohs)
+                self.generate_xml_file(entry, svhc_list, rohs_list, iec_list, output_folder, include_reach, include_rohs, include_iec)
 
             # Save the file processing status to a CSV file
             status_df = pd.DataFrame(file_status_list)
@@ -363,7 +409,7 @@ class ChemSherpaApp:
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
-    def generate_xml_file(self, entry, svhc_list, rohs_list, output_folder, include_reach, include_rohs):
+    def generate_xml_file(self, entry, svhc_list, rohs_list, iec_list, output_folder, include_reach, include_rohs, include_iec):
         # Ensure necessary columns are present and preprocess data
         required_columns = [
             'response_date', 'supply_company', 'contact_name', 'contact_email', 'contact_phone',
@@ -439,7 +485,7 @@ class ChemSherpaApp:
         material_info_section = ET.SubElement(product, "MaterialInfo")
         
 
-         # REACH SubstanceCategoryList (if applicable)
+        # REACH SubstanceCategoryList (if applicable)
         if include_reach:
             reach_category_list = ET.SubElement(material_info_section, "SubstanceCategoryList")
             ET.SubElement(reach_category_list, "SubstanceCategoryListID", {
@@ -456,7 +502,13 @@ class ChemSherpaApp:
                     "overThreshold": "true" if substance['above_threshold'] else "false",
                     "threshold": substance['threshold']
                 })
-        # Include RoHS substances if selected
+        # Add SubstanceCategoryID using the identity from CSV
+                ET.SubElement(substance_category, "SubstanceCategoryID", {
+                    "identity": substance['identity'],
+                    "authority": "IPC"
+                })
+
+        # RoHS SubstanceCategoryList (if applicable)
         if include_rohs:
             rohs_category_list = ET.SubElement(material_info_section, "SubstanceCategoryList")
             ET.SubElement(rohs_category_list, "SubstanceCategoryListID", {
@@ -473,7 +525,34 @@ class ChemSherpaApp:
                     "overThreshold": "true" if substance['above_threshold'] else "false",
                     "threshold": substance['threshold']
                 })
+                # Add SubstanceCategoryID using the identity from CSV
+                ET.SubElement(substance_category, "SubstanceCategoryID", {
+                    "identity": substance['identity'],
+                    "authority": "IPC"
+                })
 
+        # IEC SubstanceCategoryList (if applicable)
+        if include_iec:
+            iec_category_list = ET.SubElement(material_info_section, "SubstanceCategoryList")
+            ET.SubElement(iec_category_list, "SubstanceCategoryListID", {
+                "identity": "IEC_62474 D19.00", 
+                "authority": "IPC"
+            })
+
+            for substance in entry['iec_substances']:
+                substance_category = ET.SubElement(iec_category_list, "SubstanceCategory", {
+                    "name": substance['name'],
+                    "reportableApplication": "All"
+                })
+                ET.SubElement(substance_category, "Threshold", {
+                    "overThreshold": "true" if substance['above_threshold'] else "false",
+                    "threshold": substance['threshold']
+                })
+                # Add SubstanceCategoryID using the identity from CSV
+                ET.SubElement(substance_category, "SubstanceCategoryID", {
+                    "identity": substance['identity'],
+                    "authority": "IPC"
+                })
 
         # Save the XML to a file
         xml_string = ET.tostring(root, encoding="unicode")
