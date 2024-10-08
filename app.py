@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import os
 import pandas as pd
+import xml.sax.saxutils as saxutils
 
 # Functionality imports from your code
 import xml.etree.ElementTree as ET
@@ -11,33 +12,81 @@ import csv
 import zipfile
 import tempfile
 
+
+def escape_text(text):
+    return saxutils.escape(text)
+
+
 # Track file status
 file_status_list = []
 
 
 def load_svhc_list():
-    svhc_file_path = os.path.join(os.path.dirname(__file__), 'svhc.csv')
-    svhc_list = []
-    with open(svhc_file_path, newline='', encoding='utf-8') as csvfile:
+    reach_file_path = os.path.join(os.path.dirname(__file__), 'svhc.csv')
+    reach_list = []
+    
+    with open(reach_file_path, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
+        
+        # Clean up the column names
+        reader.fieldnames = [field.strip() for field in reader.fieldnames]
+        
         for row in reader:
-            if 'substance_name' in row and row['substance_name']:  # Ensure the column exists and is not empty
-                svhc_list.append({
-                    'name': row['Substance_name'],
-                    'identity': row['Identity']
+            # Ensure we are dealing with strings
+            substance_name = row.get('Substance Name', '')
+            identity = row.get('Identity', '')
+
+            # Check if the values are strings and not dictionaries
+            if isinstance(substance_name, str):
+                substance_name = substance_name.strip()
+            else:
+                print(f"Error: 'Substance Name' is not a string: {substance_name}")
+                continue  # Skip this row since it's malformed
+
+            if isinstance(identity, str):
+                identity = identity.strip()
+            else:
+                print(f"Error: 'Identity' is not a string: {identity}")
+                continue  # Skip this row since it's malformed
+
+            if substance_name:
+                reach_list.append({
+                    'name': substance_name,
+                    'identity': identity
                 })
             else:
                 print(f"Warning: Missing or empty 'substance_name' in row: {row}")
-    return svhc_list
+    
+    return reach_list
 
 def load_rohs_list():
     rohs_file_path = os.path.join(os.path.dirname(__file__), 'rohs.csv')
     rohs_list = []
-    with open(rohs_file_path, newline='', encoding='utf-8-sig') as csvfile:
+    
+    with open(rohs_file_path, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
+        
+        # Clean up the column names
+        reader.fieldnames = [field.strip() for field in reader.fieldnames]
+        
         for row in reader:
-            substance_name = row.get('Substance_name', '').strip()
-            identity = row.get('Identity', '').strip()
+            # Ensure we are dealing with strings
+            substance_name = row.get('Substance Name', '')
+            identity = row.get('Identity', '')
+
+            # Check if the values are strings and not dictionaries
+            if isinstance(substance_name, str):
+                substance_name = substance_name.strip()
+            else:
+                print(f"Error: 'Substance Name' is not a string: {substance_name}")
+                continue  # Skip this row since it's malformed
+
+            if isinstance(identity, str):
+                identity = identity.strip()
+            else:
+                print(f"Error: 'Identity' is not a string: {identity}")
+                continue  # Skip this row since it's malformed
+
             if substance_name:
                 rohs_list.append({
                     'name': substance_name,
@@ -45,16 +94,38 @@ def load_rohs_list():
                 })
             else:
                 print(f"Warning: Missing or empty 'substance_name' in row: {row}")
+    
     return rohs_list
+
 
 def load_iec_list():
     iec_file_path = os.path.join(os.path.dirname(__file__), 'iec.csv')
     iec_list = []
-    with open(iec_file_path, newline='', encoding='utf-8-sig') as csvfile:
+    
+    with open(iec_file_path, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
+        
+        # Clean up the column names
+        reader.fieldnames = [field.strip() for field in reader.fieldnames]
+        
         for row in reader:
-            substance_name = row.get('Substance_name', '').strip()
-            identity = row.get('Identity', '').strip()
+            # Ensure we are dealing with strings
+            substance_name = row.get('Substance Name', '')
+            identity = row.get('Identity', '')
+
+            # Check if the values are strings and not dictionaries
+            if isinstance(substance_name, str):
+                substance_name = substance_name.strip()
+            else:
+                print(f"Error: 'Substance Name' is not a string: {substance_name}")
+                continue  # Skip this row since it's malformed
+
+            if isinstance(identity, str):
+                identity = identity.strip()
+            else:
+                print(f"Error: 'Identity' is not a string: {identity}")
+                continue  # Skip this row since it's malformed
+
             if substance_name:
                 iec_list.append({
                     'name': substance_name,
@@ -62,6 +133,7 @@ def load_iec_list():
                 })
             else:
                 print(f"Warning: Missing or empty 'substance_name' in row: {row}")
+    
     return iec_list
 
 
@@ -144,7 +216,7 @@ def extract_info(xml_file):
             # append substance information to the info dictionary
             info['substances'].append(substance_info)  # Collect substance names and threshold info
 
-        print(f"Parsed info from {xml_file}: {info}")  # Debugging print
+        
 
         # Apply fallback logic for both contact and authorizer fields
 
@@ -185,54 +257,50 @@ def check_svhc(substances, svhc_list):
     
     # Loop through the SVHC list
     for svhc in svhc_list:
-        # Find the corresponding substance in the product's substance list
-        matched_substance = next((sub for sub in substances if sub['name'] == svhc), None)
+        svhc_name = svhc['name']  # Access the name correctly
+        matched_substance = next((sub for sub in substances if sub['name'] == svhc_name), None)
         
-        # If the SVHC substance is present and above threshold
         if matched_substance:
             svhc_info.append({
-                'name': svhc,
+                'name': svhc_name,  # Fix: Only use the name, not the whole dictionary
                 'above_threshold': matched_substance['above_threshold'],
-                'threshold': matched_substance['threshold']
+                'threshold': matched_substance['threshold'],
+                'identity': svhc['identity']  # Include identity
             })
         else:
-            # If the SVHC substance is not present in the product, use a standard entry
             svhc_info.append({
-                'name': svhc,
+                'name': svhc_name,  # Fix: Only use the name, not the whole dictionary
                 'above_threshold': False,
-                'threshold': '0.1 mass% of article [ReportingLevel:Article]'
+                'threshold': '0.1 mass% of article [ReportingLevel:Article]',
+                'identity': svhc['identity']  # Include identity
             })
     
     return svhc_info
 
 def check_rohs(substances, rohs_list):
-    """
-    Check if any of the substances in the product are RoHS substances, 
-    and whether they are above the threshold.
-    """
     rohs_info = []
     
-    # Loop through the RoHS list
     for rohs in rohs_list:
-        # Find the corresponding substance in the product's substance list
-        matched_substance = next((sub for sub in substances if sub['name'] == rohs), None)
+        rohs_name = rohs['name']  # Access the name correctly
+        matched_substance = next((sub for sub in substances if sub['name'] == rohs_name), None)
         
-        # If the RoHS substance is present and above threshold
         if matched_substance:
             rohs_info.append({
-                'name': rohs,
+                'name': rohs_name,  # Fix: Only use the name, not the whole dictionary
                 'above_threshold': matched_substance['above_threshold'],
-                'threshold': matched_substance['threshold']
+                'threshold': matched_substance['threshold'],
+                'identity': rohs['identity']  # Include identity
             })
         else:
-            # If the RoHS substance is not present in the product, use a standard entry
             rohs_info.append({
-                'name': rohs,
+                'name': rohs_name,  # Fix: Only use the name, not the whole dictionary
                 'above_threshold': False,
-                'threshold': '0.1% by weight (1000 ppm) of homogeneous materials'
+                'threshold': '0.1% by weight (1000 ppm) of homogeneous materials',
+                'identity': rohs['identity']
             })
     
     return rohs_info
+
 
 
 def check_iec(substances, iec_list):
@@ -242,27 +310,31 @@ def check_iec(substances, iec_list):
     """
     iec_info = []
     
-    # Loop through the RoHS list
+    # Loop through the IEC list
     for iec in iec_list:
+        iec_name = iec['name']  # Access the name correctly
         # Find the corresponding substance in the product's substance list
-        matched_substance = next((sub for sub in substances if sub['name'] == iec), None)
+        matched_substance = next((sub for sub in substances if sub['name'] == iec_name), None)
         
         # If the IEC substance is present and above threshold
         if matched_substance:
             iec_info.append({
-                'name': iec,
+                'name': iec_name,  # Fix: Only use the name, not the whole dictionary
                 'above_threshold': matched_substance['above_threshold'],
-                'threshold': matched_substance['threshold']
+                'threshold': matched_substance['threshold'],
+                'identity': iec['identity']  # Include identity
             })
         else:
             # If the IEC substance is not present in the product, use a standard entry
             iec_info.append({
-                'name': iec,
+                'name': iec_name,  # Fix: Only use the name, not the whole dictionary
                 'above_threshold': False,
-                'threshold': '0.1% by weight (1000 ppm) of homogeneous materials'
+                'threshold': '0.1% by weight (1000 ppm) of homogeneous materials',
+                'identity': iec['identity']
             })
     
     return iec_info
+
 
 def process_folder(shai_folder):
     svhc_list = load_svhc_list()  # Load SVHC (REACH) substances
@@ -398,7 +470,7 @@ class ChemSherpaApp:
 
             # Generate XML files based on the user's selection
             for _, entry in df.iterrows():
-                self.generate_xml_file(entry, svhc_list, rohs_list, iec_list, output_folder, include_reach, include_rohs, include_iec)
+                self.generate_xml_file(entry, output_folder, include_reach, include_rohs, include_iec)
 
             # Save the file processing status to a CSV file
             status_df = pd.DataFrame(file_status_list)
@@ -409,7 +481,7 @@ class ChemSherpaApp:
         except Exception as e:
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
 
-    def generate_xml_file(self, entry, svhc_list, rohs_list, iec_list, output_folder, include_reach, include_rohs, include_iec):
+    def generate_xml_file(self, entry, output_folder, include_reach, include_rohs, include_iec):
         # Ensure necessary columns are present and preprocess data
         required_columns = [
             'response_date', 'supply_company', 'contact_name', 'contact_email', 'contact_phone',
@@ -494,8 +566,9 @@ class ChemSherpaApp:
             })
 
             for substance in entry['svhc_substances']:
+                print(f"Adding REACH substance: {substance}")  # Debugging
                 substance_category = ET.SubElement(reach_category_list, "SubstanceCategory", {
-                    "name": substance['name'],
+                    "name": escape_text(substance['name']),
                     "reportableApplication": "All"
                 })
                 ET.SubElement(substance_category, "Threshold", {
@@ -517,8 +590,9 @@ class ChemSherpaApp:
             })
 
             for substance in entry['rohs_substances']:
+                print(f"Adding RoHS substance: {substance}")  # Debugging
                 substance_category = ET.SubElement(rohs_category_list, "SubstanceCategory", {
-                    "name": substance['name'],
+                    "name": escape_text(substance['name']),
                     "reportableApplication": "All"
                 })
                 ET.SubElement(substance_category, "Threshold", {
@@ -540,8 +614,9 @@ class ChemSherpaApp:
             })
 
             for substance in entry['iec_substances']:
+                print(f"Adding IEC substance: {substance}")  # Debugging
                 substance_category = ET.SubElement(iec_category_list, "SubstanceCategory", {
-                    "name": substance['name'],
+                    "name": escape_text(substance['name']),
                     "reportableApplication": "All"
                 })
                 ET.SubElement(substance_category, "Threshold", {
